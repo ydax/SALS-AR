@@ -23,7 +23,7 @@
 function onOpen (e) {
   var ui = SpreadsheetApp.getUi();  
   ui.createMenu("⚖️ SA Legal Solutions")
-  .addItem("🔁 Repeat Orderer", "sayHello")
+  .addItem("📊 Import Data", "cleanData")
   .addToUi();
 };
 
