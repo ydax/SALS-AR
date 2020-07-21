@@ -53,7 +53,7 @@ X Get the data pulling in from CSV properly
 
 TODO July 18, 2020
 Have invoices NOT found in new data deleted
-Create email status column. When changed to "Send", have it send an email to the POC, log a date, then change status to "Sent".
+X Create email status column. When changed to "Send", have it send an email to the POC, log a date, then change status to "Sent".
 X Finds emails of people in the AR sheet from Automation Station on data import
 X Menu function that cleans out the "Data Drop" sheet
 AS: "I’m not finding the depos on the current list that the emails are sending to change them. Where do they go after they’re removed from the current list?"

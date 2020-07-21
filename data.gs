@@ -23,7 +23,7 @@ function cleanData() {
     const existingInvoicesInBucket1 = bucket1.getRange(2, 1, bucket1.getLastRow()).getValues()
     const existingInvoicesInBucket2 = bucket2.getRange(2, 1, bucket2.getLastRow()).getValues()
     const existingInvoicesInBucket3 = bucket3.getRange(2, 1, bucket3.getLastRow()).getValues()
-    const existingInvoicesInBucket4 = bucket4.getRange(2, 1, bucket3.getLastRow()).getValues()
+    const existingInvoicesInBucket4 = bucket4.getRange(2, 1, bucket4.getLastRow()).getValues()
     const existingInvoices = existingInvoicesInBucket1.concat(existingInvoicesInBucket2, existingInvoicesInBucket3, existingInvoicesInBucket4).filter(invoice => invoice[0] !== '')
     
     // Finds invoices not in the Sheet yet.
@@ -101,20 +101,22 @@ function removePaidInvoices(incomingInvoiceNumbers, existingInvoices) {
   const ss = SpreadsheetApp.getActive()
   // Properly formats the existing invoices array into a 2D array of invoice numbers (same as the incomingInvoiceNumbers).
   existingInvoices = existingInvoices.map(elem => elem[0])
+  // Pushes any invoice numbers that are in the existingInvoices, but not in the incomingInvoices, into a new array.
   let existingInvoicesNotInIncomingInvoicesArray = []
-  incomingInvoiceNumbers.forEach(function(number) {
-    if (!existingInvoices.some(existing => existing === number)) {
+  existingInvoices.forEach(function(number) {
+    if (!incomingInvoiceNumbers.some(existing => existing === number)) {
       existingInvoicesNotInIncomingInvoicesArray.push(number)
     }
   })
+  // Creates array of arrays of rows to remove. Format [[bucketName, row]]. 
+  let rowsToRemove = []
   let removalCount = 0
-  // Deletes them and shifts rows up.
   for (let i = 0; i < existingInvoicesNotInIncomingInvoicesArray.length; i++) {
     // Looks for the row with the invoice, Sheet by Sheet.
     const bucket1 = ss.getSheetByName('30-40').getRange(2, 1, ss.getSheetByName('30-40').getLastRow()).getValues()
     for (let j = 0; j < bucket1.length; j++) {
       if (bucket1[j][0] === existingInvoicesNotInIncomingInvoicesArray[i]) {
-        console.log(existingInvoicesNotInIncomingInvoicesArray[i], 'bucket 1', j + 2)
+        rowsToRemove.push(['bucket 1', j + 2])
         removalCount++
         break
       }
@@ -122,7 +124,7 @@ function removePaidInvoices(incomingInvoiceNumbers, existingInvoices) {
     const bucket2 = ss.getSheetByName('41-60').getRange(2, 1, ss.getSheetByName('41-60').getLastRow()).getValues()
     for (let j = 0; j < bucket2.length; j++) {
       if (bucket2[j][0] === existingInvoicesNotInIncomingInvoicesArray[i]) {
-        console.log(existingInvoicesNotInIncomingInvoicesArray[i], 'bucket 2', j + 2)
+        rowsToRemove.push(['bucket 2', j + 2])
         removalCount++
         break
       }
@@ -130,7 +132,7 @@ function removePaidInvoices(incomingInvoiceNumbers, existingInvoices) {
     const bucket3 = ss.getSheetByName('61-100').getRange(2, 1, ss.getSheetByName('61-100').getLastRow()).getValues()
     for (let j = 0; j < bucket3.length; j++) {
       if (bucket3[j][0] === existingInvoicesNotInIncomingInvoicesArray[i]) {
-        console.log(existingInvoicesNotInIncomingInvoicesArray[i], 'bucket 3', j + 2)
+        rowsToRemove.push(['bucket 3', j + 2])
         removalCount++
         break
       }
@@ -138,12 +140,15 @@ function removePaidInvoices(incomingInvoiceNumbers, existingInvoices) {
     const bucket4 = ss.getSheetByName('100+').getRange(2, 1, ss.getSheetByName('100+').getLastRow()).getValues()
     for (let j = 0; j < bucket4.length; j++) {
       if (bucket4[j][0] === existingInvoicesNotInIncomingInvoicesArray[i]) {
-        console.log(existingInvoicesNotInIncomingInvoicesArray[i], 'bucket 4', j + 2)
+        rowsToRemove.push(['bucket 4', j + 2])
         removalCount++
         break
       }
     }
   }
+  // Sorts rows to remove from largest row to smallest so that deletion is done properly, then deletes each row.
+  rowsToRemove.sort((a, b) => b[1] - a[1])
+  rowsToRemove.forEach(row => removeRow(row))
   SpreadsheetApp.getActiveSpreadsheet().toast(`✔️️ Removed ${removalCount} paid invoices from AR station.`)
 }
 
@@ -279,5 +284,41 @@ function getPOCsFromAS() {
     cellRef.setValue(stringifiedArray)
   } catch (error) {
     addError(error)
+  }
+}
+
+/** Removes an invoice (by deleting the row) 
+* @param {element} array 2d array with bucket name, then row number.
+*/
+function removeRow(element) {
+  
+  const bucket = element[0]
+  const row = element[1]
+
+  const ss = SpreadsheetApp.getActive()
+  const bucket1 = ss.getSheetByName('30-40')
+  const bucket2 = ss.getSheetByName('41-60')
+  const bucket3 = ss.getSheetByName('61-100')
+  const bucket4 = ss.getSheetByName('100+')
+  
+  try {
+    switch(bucket) {
+    case 'bucket 1':
+      bucket1.deleteRow(row);
+      break;
+    case 'bucket 2':
+      bucket2.deleteRow(row);
+      break;
+    case 'bucket 3':
+      bucket3.deleteRow(row);
+      break;
+    case 'bucket 4':
+      bucket4.deleteRow(row);
+      break;
+    default:
+      addError('Got to default case in removeRow function.')
+    }
+  } catch (error) {
+    addError(`Error in removeRow: ${error}`)
   }
 }
