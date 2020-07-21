@@ -19,12 +19,7 @@ function cleanData() {
     }
     
     //////// FINDING WHICH INVOICES AREN'T IN THE SHEET YET ////////
-    // Builds an array of existing invoices in the Sheet
-    const existingInvoicesInBucket1 = bucket1.getRange(2, 1, bucket1.getLastRow()).getValues()
-    const existingInvoicesInBucket2 = bucket2.getRange(2, 1, bucket2.getLastRow()).getValues()
-    const existingInvoicesInBucket3 = bucket3.getRange(2, 1, bucket3.getLastRow()).getValues()
-    const existingInvoicesInBucket4 = bucket4.getRange(2, 1, bucket4.getLastRow()).getValues()
-    const existingInvoices = existingInvoicesInBucket1.concat(existingInvoicesInBucket2, existingInvoicesInBucket3, existingInvoicesInBucket4).filter(invoice => invoice[0] !== '')
+    const existingInvoices = getExistingInvoiceNumbers()
     
     // Finds invoices not in the Sheet yet.
     invoiceRows.forEach(function(row) {
@@ -47,7 +42,6 @@ function cleanData() {
         let zip = data[14]
         
         // Finds the correct Sheet, then prints to the data to the final + 1 row in the correct columns.
-        /**
         const bucket = findBucket(daysOverdue)
         let printRow = bucket.getLastRow() + 1
         bucket.getRange(printRow, 1).setValue(number)
@@ -62,24 +56,23 @@ function cleanData() {
         bucket.getRange(printRow, 26).setValue(city)
         bucket.getRange(printRow, 27).setValue(state)
         bucket.getRange(printRow, 28).setValue(zip)
-        */
         
         // Prints "Not Sent" in the 30-40 Email? column if daysOverdue is in the 30-40 range
-        /**
         if (daysOverdue > 30 && daysOverdue <= 40) {
           bucket.getRange(printRow, 10).setValue('Not Sent')
         }
-        */
       }
     })
     
-    // Attempts to match POCs with previous orderers in AS.
-    /**
-    matchEmails('30-40')
-    matchEmails('41-60')
-    matchEmails('61-100')
-    matchEmails('100+')
-    */
+    // Sets data validation for all rows in invoice tabs.
+    SpreadsheetApp.getActiveSpreadsheet().toast('🕹️️ Setting up data validation.')
+    const invoiceTabs = [bucket1, bucket2, bucket3, bucket4]
+    const validationRange = ss.getSheetByName('Developer').getRange(2, 1, 3, 1)
+    invoiceTabs.forEach(function(tab) {
+      const emailCells = tab.getRange(2, 10, tab.getLastRow(), 1)
+      const rule = SpreadsheetApp.newDataValidation().requireValueInRange(validationRange).build()
+      emailCells.setDataValidation(rule)
+    })
     
     // Look for invoices that were in the AR hub that aren't in this new list, removes them (this indicates they were paid).
     const incomingInvoiceNumbers = nums.filter(elem => typeof elem[0] === 'number' && elem[0].toString().length === 5).map(elem => elem[0])
@@ -321,4 +314,19 @@ function removeRow(element) {
   } catch (error) {
     addError(`Error in removeRow: ${error}`)
   }
+}
+
+/** Returns an array of existing invoice numbers. */
+function getExistingInvoiceNumbers() {
+  const ss = SpreadsheetApp.getActive()
+  const bucket1 = ss.getSheetByName('30-40')
+  const bucket2 = ss.getSheetByName('41-60')
+  const bucket3 = ss.getSheetByName('61-100')
+  const bucket4 = ss.getSheetByName('100+')
+  const existingInvoicesInBucket1 = bucket1.getRange(2, 1, bucket1.getLastRow()).getValues()
+  const existingInvoicesInBucket2 = bucket2.getRange(2, 1, bucket2.getLastRow()).getValues()
+  const existingInvoicesInBucket3 = bucket3.getRange(2, 1, bucket3.getLastRow()).getValues()
+  const existingInvoicesInBucket4 = bucket4.getRange(2, 1, bucket4.getLastRow()).getValues()
+  const existingInvoices = existingInvoicesInBucket1.concat(existingInvoicesInBucket2, existingInvoicesInBucket3, existingInvoicesInBucket4).filter(invoice => invoice[0] !== '') 
+  return existingInvoices
 }

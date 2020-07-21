@@ -52,12 +52,10 @@ Done July 11, 2020
 X Get the data pulling in from CSV properly
 
 TODO July 18, 2020
-Have invoices NOT found in new data deleted
+X Have invoices NOT found in new data deleted
 X Create email status column. When changed to "Send", have it send an email to the POC, log a date, then change status to "Sent".
 X Finds emails of people in the AR sheet from Automation Station on data import
 X Menu function that cleans out the "Data Drop" sheet
-AS: "I’m not finding the depos on the current list that the emails are sending to change them. Where do they go after they’re removed from the current list?"
-Out of curiosity, I just checked on this. If the rows are hidden, then a General Find function won’t actually locate the depo / be able to search the cells.
 
 Send function combines all the reminders for a paralegal into one email
 Send an email or make a pdf / letter based on what Blake wants.
