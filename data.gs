@@ -56,13 +56,12 @@ function cleanData() {
         bucket.getRange(printRow, 26).setValue(city)
         bucket.getRange(printRow, 27).setValue(state)
         bucket.getRange(printRow, 28).setValue(zip)
-        
-        // Prints "Not Sent" in the 30-40 Email? column if daysOverdue is in the 30-40 range
-        if (daysOverdue > 30 && daysOverdue <= 40) {
-          bucket.getRange(printRow, 10).setValue('Not Sent')
-        }
+        bucket.getRange(printRow, 10).setValue('Not Sent')
       }
     })
+    
+    // Attempts to match POCs with previous orderers in AS.
+    matchEmails()
     
     // Sets data validation for all rows in invoice tabs.
     SpreadsheetApp.getActiveSpreadsheet().toast('🕹️️ Setting up data validation.')
@@ -146,38 +145,42 @@ function removePaidInvoices(incomingInvoiceNumbers, existingInvoices) {
 }
 
                       
-/** Looks for emails of matching POC and firm names in Automation Station.
-* @param {sheetName} string The name of a Sheet in the Spreadsheet.
-*/
-function matchEmails(sheetName) {
-  SpreadsheetApp.getActiveSpreadsheet().toast(`🟢️️ Started finding matching email addresses for the ${sheetName} tab.`)
+/** Looks for matching name and firm name in Contacts Sheet. */
+function matchEmails() {
+  
+  SpreadsheetApp.getActiveSpreadsheet().toast(`🟢️️ Started finding matching email addresses for invoice POCs.`)
+  
   try {
-    // Creates references to this and the AS Spreadsheets
-    const activeSheet = SpreadsheetApp.getActive.getSheetByName(sheetName)
-    const devSheet = SpreadsheetApp.getActive().getSheetByName('Developer')
-    
-    // Tries to find matching POC, adds email address if successful.
-    const invoices = activeSheet.getRange(2, 1, activeSheet.getLastRow(), activeSheet.getLastColumn()).getValues()
-    const stringifiedDataFromAS = devSheet.getRange(1, 5).getValue()
-    const POCDataFromAS = JSON.parse(stringifiedDataFromAS)
-    for (var i = 0; i < invoices.length; i++) {
-      let invoice = invoices[i]
-      const POCEmail = invoice[7]
-      if (POCEmail === '') {
-        let fullName = invoice[5]
-        if (invoice[6] !== '') {
-          fullName = fullName + ' ' + invoice[6]
-        }
-        const firmName = invoice[4]
-        const match = POCDataFromAS.filter(elem => elem[0] === fullName && elem[1] === firmName)
-        if (match.length) {
-          const matchingEmail = match[0][2]
-          const row = i + 2
-          activeSheet.getRange(row, 8).setValue(matchingEmail)
+    const ss = SpreadsheetApp.getActive()
+    const dataTab = ss.getSheetByName('Data Drop')
+    const bucket1 = ss.getSheetByName('30-40')
+    const bucket2 = ss.getSheetByName('41-60')
+    const bucket3 = ss.getSheetByName('61-100')
+    const bucket4 = ss.getSheetByName('100+')
+    const array = [bucket1, bucket2, bucket3, bucket4]
+    const contacts = ss.getSheetByName('Contacts')
+    const contactsData = contacts.getRange(2, 1, contacts.getLastRow(), contacts.getLastColumn()).getValues()
+    array.forEach(function(bucket) {
+      // Tries to find matching POC, adds email address if successful.
+      const invoices = bucket.getRange(2, 1, bucket.getLastRow(), bucket.getLastColumn()).getValues()
+      for (var i = 0; i < invoices.length; i++) {
+        let invoice = invoices[i]
+        const POCEmail = invoice[7]
+        if (POCEmail === '') {
+          const firstName = invoice[5]
+          const lastName = invoice[6]
+          const firmName = invoice[4]
+          let match = contactsData.filter(elem => elem[0] === firstName && elem[1] === lastName && elem[2] === firmName)
+          if (match.length) {
+            match = match[0]
+            const matchingEmail = match[3]
+            const row = i + 2
+            bucket.getRange(row, 8).setValue(matchingEmail)
+          }
         }
       }
-    }
-    SpreadsheetApp.getActiveSpreadsheet().toast(`✔️️ Finished matching emails for the ${sheetName} tab where possible.`)
+    })
+    SpreadsheetApp.getActiveSpreadsheet().toast(`✔️️ Finished matching emails for invoice POCs where possible.`)
   } catch (error) {
     addError(error)
     SpreadsheetApp.getActiveSpreadsheet().toast('⚠️️️ There was an error finding matching emails. This error has been recorded.')
@@ -252,34 +255,6 @@ function findBucket(age) {
   }
 }
 
-/** Goes into Automation Station (AS), collects previous orderers (POC full name, firm name, and email address),
-* pushes each into an array, then stringify and stores an array of arrays of these previous POCs.
-*/
-function getPOCsFromAS() {
-  try {
-    // Goes into AS and collects data from 'Schedule a depo' Sheet
-    const ASRef = 'https://docs.google.com/spreadsheets/d/1aEPtrPDMyGnIE1C49dLtmzj8hl18vVvOxzUkVP2dlak/'
-    const AS = SpreadsheetApp.openByUrl(ASRef) 
-    const deposSheet = AS.getSheetByName('Schedule a depo')
-    const deposSheetData = deposSheet.getRange(2, 1, deposSheet.getLastRow(), deposSheet.getLastColumn()).getValues()
-    
-    // Instantiates an array, then pushes the POC full name, firm name, and email address as an array into the array.
-    let array = []
-    deposSheetData.forEach(function(elem) {
-      const data = [elem[3], elem[7],elem[4]]
-      array.push(data)
-    })
-    const stringifiedArray = JSON.stringify(array)
-    
-    // Prints stringified array to cell in the Developer Sheet
-    const devSheet = SpreadsheetApp.getActive().getSheetByName('Developer')
-    const cellRef = devSheet.getRange(1, 5)
-    cellRef.setValue(stringifiedArray)
-  } catch (error) {
-    addError(error)
-  }
-}
-
 /** Removes an invoice (by deleting the row) 
 * @param {element} array 2d array with bucket name, then row number.
 */
@@ -329,4 +304,39 @@ function getExistingInvoiceNumbers() {
   const existingInvoicesInBucket4 = bucket4.getRange(2, 1, bucket4.getLastRow()).getValues()
   const existingInvoices = existingInvoicesInBucket1.concat(existingInvoicesInBucket2, existingInvoicesInBucket3, existingInvoicesInBucket4).filter(invoice => invoice[0] !== '') 
   return existingInvoices
+}
+
+/** Toggles the email send status value to 'Sent' for all invoices associated with a POC after successfully sending an email.
+* @param {matches} array Array of bucket name (string) and row number matches for a POC.
+*/
+function toggleEmailSendStatus(matches) {
+  const ss = SpreadsheetApp.getActive()
+  const bucket1 = ss.getSheetByName('30-40')
+  const bucket2 = ss.getSheetByName('41-60')
+  const bucket3 = ss.getSheetByName('61-100')
+  const bucket4 = ss.getSheetByName('100+')
+  
+  matches.forEach(function(match) {
+    try {
+       const bucket = match[0]
+    const row = match[1]
+    switch(bucket) {
+      case 'bucket 1':
+        bucket1.getRange(row, 10).setValue('Sent')
+        break;
+      case 'bucket 2':
+        bucket2.getRange(row, 10).setValue('Sent')
+        break;
+      case 'bucket 3':
+        bucket3.getRange(row, 10).setValue('Sent')
+        break;
+      case 'bucket 4':
+        bucket4.getRange(row, 10).setValue('Sent')
+        break;
+      }
+    } catch (error) {
+      console.log(error)
+      addError(error)
+    }
+  })
 }

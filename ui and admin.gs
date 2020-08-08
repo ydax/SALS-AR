@@ -29,6 +29,7 @@ function onOpen (e) {
   var ui = SpreadsheetApp.getUi();  
   ui.createMenu("⚖️ SA Legal Solutions")
   .addItem("📊 Import Data", "cleanData")
+  .addItem("🔍 Sync Contacts", "syncContacts")
   .addToUi();
 };
 

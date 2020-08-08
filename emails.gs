@@ -67,29 +67,41 @@ function sendPOCEmail(e) {
       invoiceData = invoiceData[0]
       const invoiceNo = invoiceData[0]
       const amount = invoiceData[1]
+      const dueDate = invoiceData[2]
       const daysOverdue = invoiceData[3]
-      collectiveInvoiceData.push([invoiceNo, amount, daysOverdue])
+      const firmName = invoiceData[4]
+      const firstName = invoiceData[5]
+      const lastName = invoiceData[6]
+      const POCEmail = invoiceData[7]
+      collectiveInvoiceData.push([invoiceNo, amount, dueDate, daysOverdue, firmName, firstName, lastName, POCEmail])
     })
     
-    console.log(collectiveInvoiceData) // works
-    /** Looks like this: 
-    [ [ 12755, 308.75, 26 ],
-    [ 12780, 146.25, 19 ],
-    [ 12796, 130, 17 ],
-    [ 12803, 130, 13 ],
-    [ 12755, 308.75, 27 ],
-    [ 12780, 146.25, 20 ],
-    [ 12796, 130, 18 ],
-    [ 12803, 130, 14 ],
-    [ 12668, 97.5, 60 ],
-    [ 12755, 308.75, 26 ],
-    [ 12780, 146.25, 19 ],
-    [ 12796, 130, 17 ],
-    [ 12803, 130, 13 ],
-    [ 12668, 97.5, 60 ],
-    [ 12668, 97.5, 60 ],
-    [ 12629, 81.25, 80 ] ]
-    */
+    // Gets Drive file ids of invoices associated with this POC.
+    for (let i = 0; i < collectiveInvoiceData.length; i++) {
+      const invoiceNo = collectiveInvoiceData[i][0]
+      const id = findInvoice(invoiceNo)
+      if (id) {
+        collectiveInvoiceData[i].push(id)
+      } 
+      // If invoice wasn't found, send an email telling Blake it wasn't in the folder.
+      else {
+        // Lets user know via toast.
+        SpreadsheetApp.getActiveSpreadsheet().toast(`⚠️ Could not find invoice no. ${invoiceNo}. Sent you a reminder email.`)
+        // Sends reminder email.
+        GmailApp.sendEmail('bboyd@salegalsolutions.com', `Could not find invoice no. ${invoiceNo}`, 'Howdy,\n\nYou were trying to send AR emails, and when AR station was looking for invoice number ' + invoiceNo + ' associated with ' + collectiveInvoiceData[i][5] + ' ' + collectiveInvoiceData[i][6] + ', it wasn\'t in the Invoices folder at https://drive.google.com/drive/folders/1fheoM0D86nabYbw0CYy9HGnoqs8d004M.\n\nYou may want to upload it to the Invoices folder. When that\'s done and when you send another email to this person, the invoice will then be included in the AR / collections email.', { name: 'AR Station Bot' })
+        // Splices invoice out of collective invoices array and matches array.
+        collectiveInvoiceData.splice(i, 1)
+        matches.splice(i, 1)
+      }
+    }
+    
+    // Sends email to POC.
+    sendCollectionEmail(collectiveInvoiceData)
+    
+    // Toggles email send status for invoices included in the email.
+    toggleEmailSendStatus(matches)
+    SpreadsheetApp.getActiveSpreadsheet().toast('✅ Toggled email send status of invoices associated with this POC in AR Station. Automation complete.')
+
     
     // Releases the mutual exclusion lock.
     lock.releaseLock()
@@ -97,6 +109,127 @@ function sendPOCEmail(e) {
     addError('Error in sendPOCEmail: ' + error);
   }
 }
+
+/** Sends a collections email to POC.
+@params {array} array Array of invoice data arrays associated with a POC.
+*/
+function sendCollectionEmail(array) {
+  const templateId = getRandomTemplateId()
+  const pocEmail = array[0][7]
+  const firstName = array[0][5]
+  try {
+    //////// GENERATING MESSAGE FROM ID ////////////
+    // Gets message from ID
+    const id = Gmail.Users.Drafts.get('me', templateId).message.id
+    const message = GmailApp.getMessageById(id)
+    let template = message.getRawContent()
+    let subject = GmailApp.getMessageById(id).getSubject()
+    console.log(id, subject)
+    
+    // Structures plural / singular phrasing based on number of invoices.
+    let invoiceSubject = 'an outstanding invoice'
+    let invoicePlural = 'an invoice'
+    if (array.length > 1) {
+      invoiceSubject = 'a couple oustanding invoices'
+      invoicePlural = 'a couple of invoices'
+    }
+    
+    // Replaces template variables with custom ones for the user using RegExes.
+    subject = subject.replace(/invoiceSubject/g, invoiceSubject)
+    template = template.replace(/templates@salegalsolutions.com/g, pocEmail)
+    template = template.replace(/invoiceSubject/g, invoiceSubject)
+    template = template.replace(/invoicePlural/g, invoicePlural)
+    
+    // Creates an array of attachments.
+    let attachments = []
+    array.forEach(function(invoice) {
+      const fileId = invoice[8]
+      attachments.push(DriveApp.getFileById(fileId))
+    })
+    
+    // Creates the new message
+    GmailApp.sendEmail(
+      pocEmail, 
+      subject, 
+      'Hello ' + firstName + ',\n\nI found ' + invoicePlural + ' that I wanted to bring to your attention (please see attached). Would you mind checking on this for me?\n\nThanks!\n\nBlake', 
+      {
+        attachments: attachments,
+        // htmlBody: template,
+        name: 'Blake Boyd',
+        bcc: 'bboyd@salegalsolutions.com',
+      })
+    SpreadsheetApp.getActiveSpreadsheet().toast(`✅️ Reminder email successfully sent to ${pocEmail}.`)
+  } catch (error) {
+    Logger.log(error)
+    SpreadsheetApp.getActiveSpreadsheet().toast(`⚠️ There was an error sending this email. It has been logged for the developer.`)
+    addError(error)
+  }
+}
+
+
+/** Generates a deposition confirmation PDF to include in confirmation email
+* @param {array} array Invoice data created inside sendPOCEmail.
+* @return {pdfUrl} string URL (file hosted on Google Drive) where the confirmation PDF can be found.
+* @dev 200805 This isn't being used currently. Instead, we're going into a Drive folder, finding the pre-existing PDFs, and attaching them.
+*/
+function createInvoicePDF (array) {
+  
+  const invoiceNo = array[0]
+  const dueDate = array[1]
+  const invoiceAmount = array[2]
+  const daysOverdue = array[3]
+  const firmName = array[4]
+  const firstName = array[5]
+  const lastName = array[6]
+  const fullName = createFullName(firstName, lastName)
+  
+  SpreadsheetApp.getActiveSpreadsheet().toast(`📝 Started Creating PDF for Invoice Number ${invoiceNo}`)
+  
+  try {
+    // setup
+    var template = DocumentApp.openByUrl('https://docs.google.com/document/d/1mZBA0evQ6qvDM03rvIM9FYWspHFE1L36MY7LT7RLBdo/edit')
+    var templateId = '1mZBA0evQ6qvDM03rvIM9FYWspHFE1L36MY7LT7RLBdo'
+    var automatedInvoiceFolder = '1Va-Yl6d3h-zKogDIaer55aNP_4RFB6kb'
+    
+    // Generates the Google Doc version of the confirmation PDF.
+    var fileName = 'SA Legal Solutions Invoice No. ' + invoiceNo
+    var folder = DriveApp.getFolderById(automatedInvoiceFolder)
+    var generatedDocCertUrl = DriveApp.getFileById(templateId).makeCopy(fileName, folder).getUrl()
+    
+    // Generates the URL of the newly-generated Google Docs version of the confirmation PDF (without copying the template fresh).
+    var newUrl = ''
+    var files = DriveApp.getFilesByName(fileName)
+    while (files.hasNext()) {
+      var file = files.next()
+      newUrl = file.getUrl()
+    }
+    SpreadsheetApp.getActiveSpreadsheet().toast('✔️ New Invoice Template Created 📝')
+    
+    // Adds deposition information to template.  
+    var confirmationBody = DocumentApp.openByUrl(newUrl).getBody()
+    
+    confirmationBody.replaceText('invoiceDate', dueDate)
+    confirmationBody.replaceText('invoiceNumber', invoiceNo)
+    confirmationBody.replaceText('POCName', fullName)
+    confirmationBody.replaceText('amountDue', invoiceAmount)
+    
+    DocumentApp.openByUrl(newUrl).saveAndClose()
+    
+    // Converts the Google Doc version to PDF and updates sharing settings.
+    var pdfUrl = convertToPDF(newUrl).slice(0, -13)
+    var pdfId = getIdFromUrl(pdfUrl)
+    moveFile(pdfId, automatedInvoiceFolder)
+    folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+    SpreadsheetApp.getActiveSpreadsheet().toast(`✅ Invoice No. ${invoiceNo} PDF Creation Successful`)
+    
+    // remove the doc version of the generated cert
+    DriveApp.getFileById(getIdFromUrl(newUrl)).setTrashed(true)
+    
+    return pdfUrl
+  } catch (error) {
+    console.log(error)
+  }
+} 
 
 
 ///////////////////////////////////////////////////
@@ -154,4 +287,72 @@ function getPOCInvoiceMatches(firstName, lastName, firmName) {
   }
   
   return results
+}
+
+/** Creates a full name from seperated name strings.
+* @param {firstName} string
+* @param {lastName} string
+*/
+function createFullName(firstName, lastName) {
+  let fullName = firstName
+  if (lastName !== '') {
+    fullName = firstName + ' ' + lastName
+  }
+  return fullName
+}
+
+/** Finds the id of the invoice uploaded by Blake in Drive Invoices folder.
+* @dev Folder link: https://drive.google.com/drive/folders/1fheoM0D86nabYbw0CYy9HGnoqs8d004M
+*/
+function findInvoice(invoiceNo) {
+  try {
+    // Looks for invoice in the Invoices folder.
+    const invoice = DriveApp.getFolderById('1fheoM0D86nabYbw0CYy9HGnoqs8d004M').getFilesByName(`${invoiceNo}.pdf`)
+    let id
+    while (invoice.hasNext()) {
+      const file = invoice.next()
+      id = file.getId()
+    }
+    if (id) return id 
+    
+    // Looks for the invoice in the entire Drive folder if not yet found.
+    const search = DriveApp.searchFiles(`title contains "${invoiceNo}"`)
+    while (search.hasNext()) { 
+      const file = search.next()
+      const name = file.getName()
+      // Make sure the file has the characters 'inv', the way Blake stores invoices originally.
+      const match = name.match('Inv.')
+      if (match) {
+        return file.getId()
+      }
+    } 
+  } catch (error) {
+    console.log(error)
+    addError(error)
+  }
+}
+
+// Displays a list of template IDs in the logs
+function seeTemplateIds () {
+  // Gets Gmail objects for all messages in drafts
+  var response = Gmail.Users.Drafts.list('me')
+  var drafts = response.drafts
+  
+  for (var i = 0; i < drafts.length; i++) {
+    var gmailObjId = drafts[i].id // gets the GMail object ID
+    // Gets the message id of from the Gmail object
+    let draft = Gmail.Users.Drafts.get('me', gmailObjId).message.id
+    let recipient = GmailApp.getMessageById(draft).getTo()
+    if (recipient === 'templates@salegalsolutions.com') {
+      let subject = GmailApp.getMessageById(draft).getSubject()
+      Logger.log(`${gmailObjId}: ${subject}`)
+    }
+  }
+}
+
+// Returns a random template ID.
+function getRandomTemplateId() {
+  const templateArray = ['r-8391933797462466790', 'r-1139857297992043373']
+  const id = templateArray[Math.floor(Math.random() * templateArray.length)]
+  return id
 }
