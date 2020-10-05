@@ -88,7 +88,7 @@ function sendPOCEmail(e) {
         // Lets user know via toast.
         SpreadsheetApp.getActiveSpreadsheet().toast(`⚠️ Could not find invoice no. ${invoiceNo}. Sent you a reminder email.`)
         // Sends reminder email.
-        GmailApp.sendEmail('bboyd@salegalsolutions.com', `Could not find invoice no. ${invoiceNo}`, 'Howdy,\n\nYou were trying to send AR emails, and when AR station was looking for invoice number ' + invoiceNo + ' associated with ' + collectiveInvoiceData[i][5] + ' ' + collectiveInvoiceData[i][6] + ', it wasn\'t in the Invoices folder at https://drive.google.com/drive/folders/1fheoM0D86nabYbw0CYy9HGnoqs8d004M.\n\nYou may want to upload it to the Invoices folder. When that\'s done and when you send another email to this person, the invoice will then be included in the AR / collections email.', { name: 'AR Station Bot' })
+        GmailApp.sendEmail('bboyd@salegalsolutions.com', `Could not find invoice no. ${invoiceNo}`, 'Howdy,\n\nYou were sending AR emails, and when AR station was looking for invoice number ' + invoiceNo + ' associated with ' + collectiveInvoiceData[i][5] + ' ' + collectiveInvoiceData[i][6] + ', it wasn\'t in the Invoices folder at https://drive.google.com/drive/folders/1fheoM0D86nabYbw0CYy9HGnoqs8d004M.\n\nThe email you attempted to send to them WAS STILL SENT, it just didn\'t include invoice no. ' + invoiceNo + '\n\nYou may want to upload it to the Invoices folder, or go to your sent emails, find the email that was sent, and manually reply to that thread with the missing invoice attached. If you send another email to this person using an automation in AR Station after you\'ve added this invoice to the Invoices folder in Drive, the invoice will then be included in the AR / collections email.', { name: 'AR Station Bot' })
         // Splices invoice out of collective invoices array and matches array.
         collectiveInvoiceData.splice(i, 1)
         matches.splice(i, 1)
@@ -124,7 +124,6 @@ function sendCollectionEmail(array) {
     const message = GmailApp.getMessageById(id)
     let template = message.getRawContent()
     let subject = GmailApp.getMessageById(id).getSubject()
-    console.log(id, subject)
     
     // Structures plural / singular phrasing based on number of invoices.
     let invoiceSubject = 'an outstanding invoice'
@@ -165,7 +164,6 @@ function sendCollectionEmail(array) {
     addError(error)
   }
 }
-
 
 /** Generates a deposition confirmation PDF to include in confirmation email
 * @param {array} array Invoice data created inside sendPOCEmail.
@@ -230,6 +228,123 @@ function createInvoicePDF (array) {
     console.log(error)
   }
 } 
+
+/** Gets the body string for a custom email (typed in the sidebar).
+* TODO: This is mostly built. I just need to test it with Blake's account.
+*/
+function sendCustomEmail(subject, body, sheetName, editRow) {
+  try {
+    // Sets a mutual-exclusion lock to prevent code collisions if user is making multiple quick edits.
+    const lock = LockService.getDocumentLock()
+    lock.waitLock(6000)
+    
+    SpreadsheetApp.getActiveSpreadsheet().toast('📧️ Email automation started.')
+    
+    // Instantiates references to individual Sheets
+    const ss = SpreadsheetApp.getActive()
+    const dataTab = ss.getSheetByName('Data Drop')
+    const bucket1 = ss.getSheetByName('30-40')
+    const bucket2 = ss.getSheetByName('41-60')
+    const bucket3 = ss.getSheetByName('61-100')
+    const bucket4 = ss.getSheetByName('100+')
+    
+    // Gets POC details
+    const activeSheet = ss.getSheetByName(sheetName)
+    const rowData = activeSheet.getRange(editRow, 1, 1, activeSheet.getLastColumn()).getValues()[0]
+    const POCEmail = rowData[7]
+    const firstName = rowData[5]
+    const lastName = rowData[6]
+    const firmName = rowData[4]
+    
+    // Matches all unpaid invoices from this POC.
+    const matches = getPOCInvoiceMatches(firstName, lastName, firmName) // Returns array of arrays with bucket reference string, row #
+    
+    // Gathers details from each match, then sends an email with these details.
+    let collectiveInvoiceData = []
+    matches.forEach(function(match) {
+      let invoiceData
+      const bucket = match[0]
+      const row = match[1]
+      switch(bucket) {
+        case 'bucket 1':
+          invoiceData = bucket1.getRange(row, 1, 1, bucket1.getLastColumn()).getValues()
+          break;
+        case 'bucket 2':
+          invoiceData = bucket2.getRange(row, 1, 1, bucket1.getLastColumn()).getValues()
+          break;
+        case 'bucket 3':
+          invoiceData = bucket3.getRange(row, 1, 1, bucket1.getLastColumn()).getValues()
+          break;
+        case 'bucket 4':
+          invoiceData = bucket4.getRange(row, 1, 1, bucket1.getLastColumn()).getValues()
+          break;
+      }
+      invoiceData = invoiceData[0]
+      const invoiceNo = invoiceData[0]
+      const amount = invoiceData[1]
+      const dueDate = invoiceData[2]
+      const daysOverdue = invoiceData[3]
+      const firmName = invoiceData[4]
+      const firstName = invoiceData[5]
+      const lastName = invoiceData[6]
+      const POCEmail = invoiceData[7]
+      collectiveInvoiceData.push([invoiceNo, amount, dueDate, daysOverdue, firmName, firstName, lastName, POCEmail])
+    })
+    
+    // Gets Drive file ids of invoices associated with this POC.
+    for (let i = 0; i < collectiveInvoiceData.length; i++) {
+      const invoiceNo = collectiveInvoiceData[i][0]
+      const id = findInvoice(invoiceNo)
+      if (id) {
+        collectiveInvoiceData[i].push(id)
+      } 
+      // If invoice wasn't found, send an email telling Blake it wasn't in the folder.
+      else {
+        // Lets user know via toast.
+        SpreadsheetApp.getActiveSpreadsheet().toast(`⚠️ Could not find invoice no. ${invoiceNo}. Sent you a reminder email.`)
+        // Sends reminder email.
+        GmailApp.sendEmail('bboyd@salegalsolutions.com', `Could not find invoice no. ${invoiceNo}`, 'Howdy,\n\nYou were sending AR emails, and when AR station was looking for invoice number ' + invoiceNo + ' associated with ' + collectiveInvoiceData[i][5] + ' ' + collectiveInvoiceData[i][6] + ', it wasn\'t in the Invoices folder at https://drive.google.com/drive/folders/1fheoM0D86nabYbw0CYy9HGnoqs8d004M.\n\nThe email you attempted to send to them WAS STILL SENT, it just didn\'t include invoice no. ' + invoiceNo + '\n\nYou may want to upload it to the Invoices folder, or go to your sent emails, find the email that was sent, and manually reply to that thread with the missing invoice attached. If you send another email to this person using an automation in AR Station after you\'ve added this invoice to the Invoices folder in Drive, the invoice will then be included in the AR / collections email.', { name: 'AR Station Bot' })
+        // Splices invoice out of collective invoices array and matches array.
+        collectiveInvoiceData.splice(i, 1)
+        matches.splice(i, 1)
+      }
+    }
+    
+    ////////////////////////////////////
+    //////// SENDING THE EMAIL /////////
+    ////////////////////////////////////
+    
+    // Creates an array of attachments.
+    let attachments = []
+    collectiveInvoiceData.forEach(function(invoice) {
+      const fileId = invoice[8]
+      attachments.push(DriveApp.getFileById(fileId))
+    })
+    
+    // Creates the new message
+    GmailApp.sendEmail(
+      POCEmail, 
+      subject, 
+      body, 
+      {
+        attachments: attachments,
+        name: 'Blake Boyd',
+        // bcc: 'bboyd@salegalsolutions.com',
+      })
+    SpreadsheetApp.getActiveSpreadsheet().toast(`✅️ Reminder email successfully sent to ${POCEmail}.`)
+    
+    // Toggles email send status for invoices included in the email.
+    toggleEmailSendStatus(matches)
+    SpreadsheetApp.getActiveSpreadsheet().toast('✅ Toggled email send status of invoices associated with this POC in AR Station. Automation complete.')
+
+    
+    // Releases the mutual exclusion lock.
+    lock.releaseLock()
+  } catch (error) {
+    console.log(error)
+    addError('Error in sendPOCEmail: ' + error);
+  }
+}
 
 
 ///////////////////////////////////////////////////

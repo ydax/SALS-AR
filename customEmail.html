@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Send Custom AR Email</title>
+
+    <!-- Styling Scripts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <!-- Interact with Google Sheet -->
+    <script>
+      $(document).ready(function () {
+        $('select').formSelect();
+      });
+      
+      function getEmailBody(e) {
+        e.preventDefault();
+        $("button").attr("disabled", "disabled");
+        google.script.run.withSuccessHandler(function () {
+          $("button").removeAttr("disabled");
+          })
+        .sendCustomEmail(
+          $('#subject').val(),
+          $('#body').val(),
+          <?= pocInfo.sheetName ?>,
+          <?= pocInfo.activeRow ?>,
+        );
+      };
+    </script>
+</head>
+
+<body>
+  <div class="container">
+    <h5 class="grey-text">Send Customized Email</h5>
+    <p>This email will be sent to <strong><?= pocInfo.firstName ?></strong> from <strong><?= pocInfo.firm ?></strong> at <strong><?= pocInfo.email ?></strong>.</p>
+  </div>
+  
+  <!-- Form Used to Construct Email -->
+  <form id="customEmail" onsubmit="getEmailBody(event)">
+    <div class="row">
+      <div class="input-field col s12">
+        <input id="subject" type="text">
+        <label for="subject">Email Subject</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="input-field col s12">
+        <textarea id="body" class="materialize-textarea"></textarea>
+        <label for="body">Body of Email</label>
+      </div>
+    </div>
+
+    <!-- Submission Button -->
+    <div class="container center">
+      <button class="btn" type="submit"><i class="material-icons left">send</i>Send Email</button>
+    </div>
+  </form>
+</body>
+
+</html>

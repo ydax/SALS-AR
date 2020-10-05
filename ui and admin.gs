@@ -28,6 +28,7 @@ function showLastRow() {
 function onOpen (e) {
   var ui = SpreadsheetApp.getUi();  
   ui.createMenu("⚖️ SA Legal Solutions")
+  .addItem("📧 Send Custom Email", "launchCustomEmailSidebar")
   .addItem("📊 Import Data", "cleanData")
   .addItem("🔍 Sync Contacts", "syncContacts")
   .addToUi();
@@ -42,6 +43,34 @@ function addError(message){
   const array = [timestamp, message]
   devSheet.getRange(devSheet.getLastRow() + 1, 1, 1, 2).setValues([array])
 }
+
+// Launches the custom email sidebar.
+function launchCustomEmailSidebar() {
+  // Ensures that user is in an acceptable part of the AR Hub.
+  const ss = SpreadsheetApp.getActive()
+  const sheet = ss.getActiveSheet()
+  const sheetName = sheet.getName()
+  const activeRow = sheet.getActiveCell().getRow()
+  if (!validateCustomEmailSelection(sheetName, activeRow)) {
+    SpreadsheetApp.getActiveSpreadsheet().toast('⚠️ Rejected: You must be on a valid sheet and not on row 1 to perform this action.')
+    return
+  }
+  // Ensures that this row has some data.
+  const pocInfo = getPocInfoForCustomEmail();
+  if (pocInfo.firstName.length < 2) {
+    SpreadsheetApp.getActiveSpreadsheet().toast('⚠️ Rejected: It looks like this row doesn\'t have any data.')
+    return
+  }
+  // Ensures that this POC has an email address.
+  if (pocInfo.email.length < 2) {
+    SpreadsheetApp.getActiveSpreadsheet().toast('⚠️ Rejected: It looks like contact doesn\'t have an email address.')
+    return
+  }
+  var template = HtmlService.createTemplateFromFile('customEmail');
+  template.pocInfo = pocInfo
+  var html = template.evaluate().setTitle('📧 Send a Custom AR Email');
+  SpreadsheetApp.getUi().showSidebar(html);
+};
 
 
 //////////////////////////////////////////////

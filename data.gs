@@ -340,3 +340,32 @@ function toggleEmailSendStatus(matches) {
     }
   })
 }
+
+/** Gets information about a POC for use in sending a custom email. */
+function getPocInfoForCustomEmail() {
+  const ss = SpreadsheetApp.getActive()
+  const sheet = ss.getActiveSheet()
+  const sheetName = sheet.getName()
+  const activeRow = sheet.getActiveCell().getRow()
+  const data = sheet.getRange(activeRow, 1, 1, sheet.getLastColumn()).getValues()
+  const firstName = data[0][5]
+  const firm = data[0][4]
+  let email = data[0][7]
+  return { firstName, firm, email, sheetName, activeRow }
+};
+          
+/** Validates whether a user's selction to send a custom email is valid.
+* @param {sheetName} string Name of Sheet when user selected to send a custom email.
+* @param {activeRow} int Row number when initiated.
+* @return bool True if selection is legit.
+*/
+function validateCustomEmailSelection(sheetName, rowNumber) {
+  let result = true
+  if (!(sheetName == '30-40' || sheetName == '41-60' || sheetName == '61-100' || sheetName == '100+')) {
+    result = false
+  }
+  if (rowNumber == 1) {
+    result = false
+  }
+  return result
+}
